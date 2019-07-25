@@ -425,7 +425,7 @@ type paramList struct {
 	Variadic bool
 }
 
-func (g *Generator) genList(list *types.Tuple, variadic bool) *paramList {
+func (g *Generator) genList(varName string, list *types.Tuple, variadic bool) *paramList {
 	var params paramList
 
 	if list == nil {
@@ -451,7 +451,7 @@ func (g *Generator) genList(list *types.Tuple, variadic bool) *paramList {
 		pname := v.Name()
 
 		if g.nameCollides(pname) || pname == "" {
-			pname = fmt.Sprintf("_a%d", i)
+			pname = fmt.Sprintf("_%s%d", varName, i)
 		}
 
 		params.Names = append(params.Names, pname)
@@ -497,9 +497,18 @@ func (g *Generator) Generate() error {
 		ftype := fn.Type().(*types.Signature)
 		fname := fn.Name()
 
-		params := g.genList(ftype.Params(), ftype.Variadic())
-		returns := g.genList(ftype.Results(), false)
-
+		params := g.genList("a", ftype.Params(), ftype.Variadic())
+		returns := g.genList("b", ftype.Results(), false)
+		if len(params.Names) > 0 && len(returns.Names) > 0 {
+			g.printOnAnyReturnFunc(fname, returns)
+		}
+		if len(params.Names) > 0 {
+			g.printOnAnyFunc(fname, params)
+		}
+		if len(returns.Names) > 0 {
+			g.printOnReturnFunc(fname, params, returns)
+		}
+		g.printOnFunc(fname, params)
 		if len(params.Names) == 0 {
 			g.printf("// %s provides a mock function with given fields:\n", fname)
 		} else {
@@ -645,4 +654,69 @@ func (g *Generator) Write(w io.Writer) error {
 
 	w.Write(res)
 	return nil
+}
+
+func (g *Generator) printOnFunc(fname string, params *paramList) {
+	if len(params.Names) == 0 {
+		g.printf("// On%s creates a *mock.Call to %s with given fields:\n", fname, fname)
+	} else {
+		g.printf(
+			"// On%s creates a *mock.Call to %s with given fields: %s\n", fname, fname,
+			strings.Join(params.Names, ", "),
+		)
+	}
+	g.printf(
+		"func (_m *%s) On%s(%s) *mock.Call {\n", g.mockName(), fname,
+		strings.Join(params.Params, ", "),
+	)
+
+	g.printf("\treturn _m.On(\"%s\"", fname)
+	if len(params.Names) > 0 {
+		g.printf(", %s", strings.Join(params.Names, ", "))
+	}
+	g.printf(")\n}\n")
+}
+
+func (g *Generator) printOnAnyFunc(fname string, params *paramList) {
+	g.printf("// OnAny%s creates a *mock.Call to %s which accepts any fields of the correct types\n", fname, fname)
+	g.printf("func (_m *%s) OnAny%s() *mock.Call {\n", g.mockName(), fname)
+
+	g.printf("\treturn _m.On(\"%s\"", fname)
+	for _, paramType := range params.Types {
+		g.printf(", mock.AnythingOfType(\"%s\")", paramType)
+	}
+	g.printf(")\n}\n")
+}
+
+func (g *Generator) printOnReturnFunc(fname string, params, returns *paramList) {
+	if len(params.Names) == 0 {
+		g.printf("// OnReturn%s creates a *mock.Call to %s with no input fields", fname, fname)
+	} else {
+		g.printf(
+			"// OnReturn%s creates a *mock.Call to %s with input fields: %s", fname, fname,
+			strings.Join(params.Names, ", "),
+		)
+	}
+	if len(returns.Names) == 0 {
+		g.printf(" conifgured with no return values")
+	} else {
+		g.printf(" conifgured with no return values: %v", strings.Join(returns.Names, ", "))
+	}
+	g.printf("\n")
+	g.printf(
+		"func (_m *%s) OnReturn%s(%s) *mock.Call {\n", g.mockName(), fname,
+		strings.Join(append(params.Params, returns.Params...), ", "),
+	)
+	g.printf("\treturn _m.On%s(%s).Return(%s)\n}\n", fname, strings.Join(params.Names, ", "), strings.Join(returns.Names, ", "))
+}
+
+func (g *Generator) printOnAnyReturnFunc(fname string, returns *paramList) {
+	g.printf("// OnAnyReturn%s creates a *mock.Call to %s which accepts any fields of the correct types and returns:", fname, fname)
+	if len(returns.Names) == 0 {
+		g.printf("\n")
+	} else {
+		g.printf(" %s\n", strings.Join(returns.Names, ", "))
+	}
+	g.printf("func (_m *%s) OnAnyReturn%s(%s) *mock.Call {\n", g.mockName(), fname, strings.Join(returns.Params, ", "))
+	g.printf("\treturn _m.OnAny%s().Return(%s)\n}\n", fname, strings.Join(returns.Names, ", "))
 }
