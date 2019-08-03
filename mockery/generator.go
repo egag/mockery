@@ -682,8 +682,8 @@ func (g *Generator) printOnAnyFunc(fname string, params *paramList) {
 	g.printf("func (_m *%s) OnAny%s() *mock.Call {\n", g.mockName(), fname)
 
 	g.printf("\treturn _m.On(\"%s\"", fname)
-	for _, paramType := range params.Types {
-		g.printf(", mock.AnythingOfType(\"%s\")", paramType)
+	for range params.Types {
+		g.printf(", mock.Anything")
 	}
 	g.printf(")\n}\n")
 }
