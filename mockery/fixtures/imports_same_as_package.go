@@ -1,7 +1,7 @@
 package test
 
 import (
-	"github.com/vektra/mockery/mockery/fixtures/test"
+	"github.com/egag/mockery/mockery/fixtures/test"
 )
 
 type C int
