@@ -665,14 +665,23 @@ func (g *Generator) printOnFunc(fname string, params *paramList) {
 			strings.Join(params.Names, ", "),
 		)
 	}
-	g.printf(
-		"func (_m *%s) On%s(%s) *mock.Call {\n", g.mockName(), fname,
-		strings.Join(params.Params, ", "),
-	)
+	g.printf("func (_m *%s) On%s(%s) *mock.Call {\n", g.mockName(), fname, strings.Join(params.Params, ", "))
 
+	input := ""
+	if params.Variadic {
+		variadic := params.Names[len(params.Names)-1]
+		inputVariadic := variadic + "Interfaces"
+		g.printf("\t%s := []interface{}{%s}\n", inputVariadic, strings.Join(params.Names[:len(params.Names)-1], ", "))
+		g.printf("\tfor i := range %s {\n", variadic)
+		g.printf("\t\t%s = append(%s, %s[i])\n", inputVariadic, inputVariadic, variadic)
+		g.printf("\t}\n")
+		input = inputVariadic + "..."
+	} else if len(params.Names) > 0 {
+		input = strings.Join(params.Names, ", ")
+	}
 	g.printf("\treturn _m.On(\"%s\"", fname)
 	if len(params.Names) > 0 {
-		g.printf(", %s", strings.Join(params.Names, ", "))
+		g.printf(", %s", input)
 	}
 	g.printf(")\n}\n")
 }
@@ -703,11 +712,15 @@ func (g *Generator) printOnReturnFunc(fname string, params, returns *paramList) 
 		g.printf(" conifgured with no return values: %v", strings.Join(returns.Names, ", "))
 	}
 	g.printf("\n")
-	g.printf(
-		"func (_m *%s) OnReturn%s(%s) *mock.Call {\n", g.mockName(), fname,
-		strings.Join(append(params.Params, returns.Params...), ", "),
+	g.printf("func (_m *%s) OnReturn%s(%s) *mock.Call {\n",
+		g.mockName(), fname,
+		strings.ReplaceAll(strings.Join(append(params.Params, returns.Params...), ", "), "...", "[]"),
 	)
-	g.printf("\treturn _m.On%s(%s).Return(%s)\n}\n", fname, strings.Join(params.Names, ", "), strings.Join(returns.Names, ", "))
+	input := strings.Join(params.Names, ", ")
+	if params.Variadic {
+		input += "..."
+	}
+	g.printf("\treturn _m.On%s(%s).Return(%s)\n}\n", fname, input, strings.Join(returns.Names, ", "))
 }
 
 func (g *Generator) printOnAnyReturnFunc(fname string, returns *paramList) {
@@ -719,4 +732,15 @@ func (g *Generator) printOnAnyReturnFunc(fname string, returns *paramList) {
 	}
 	g.printf("func (_m *%s) OnAnyReturn%s(%s) *mock.Call {\n", g.mockName(), fname, strings.Join(returns.Params, ", "))
 	g.printf("\treturn _m.OnAny%s().Return(%s)\n}\n", fname, strings.Join(returns.Names, ", "))
+}
+
+func asInput(names []string, variadic bool) string {
+	s := ""
+	if len(names) > 0 {
+		s += strings.Join(names, ", ")
+	}
+	if variadic {
+		s += "..."
+	}
+	return s
 }
